@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>マンデルブロ宇宙探査機 | p5.js</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.11/p5.min.js"></script>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#080d1b;color:#e9eefc;font-family:system-ui,-apple-system,sans-serif}header{padding:14px 18px;background:#111a30;border-bottom:1px solid #34415e}h1{font-size:1.3rem;margin:0 0 5px}header p{margin:0;color:#a9b8d6;font-size:.85rem}.layout{display:grid;grid-template-columns:minmax(0,1fr) 270px;gap:12px;padding:12px;max-width:1500px;margin:auto}.viewer{position:relative;min-width:0;background:#000;border:1px solid #34415e;border-radius:12px;overflow:hidden;touch-action:none}#canvas-holder{width:100%;height:min(74vh,720px);min-height:330px;touch-action:none}#canvas-holder canvas{display:block;touch-action:none}.status{position:absolute;bottom:8px;left:8px;background:#080d1bd9;padding:7px 10px;border-radius:7px;font:12px ui-monospace,monospace;pointer-events:none;max-width:calc(100% - 16px);overflow-wrap:anywhere}aside{background:#111a30;border:1px solid #34415e;border-radius:12px;padding:16px;align-self:start}label{display:block;margin:15px 0 5px;font-size:.88rem;color:#cad5ed}select,input[type=range],button{width:100%}select,button{background:#243450;border:1px solid #526482;border-radius:8px;padding:10px;color:#fff;font:inherit}button{cursor:pointer;margin-top:9px}button:hover{background:#354d72}input{accent-color:#6db8ff}.small{font-size:.78rem;line-height:1.6;color:#a9b8d6}.value{float:right;font-family:monospace}footer{padding:10px 20px;text-align:center;color:#8393b5;font-size:.75rem}@media(max-width:760px){.layout{grid-template-columns:1fr}#canvas-holder{height:57vh;min-height:300px}aside{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}aside h2,aside .small{grid-column:1/-1}button{font-size:.85rem}}
+</style>
+</head>
+<body>
+<header><h1>✦ マンデルブロ宇宙探査機</h1><p>無限に続く数学の風景を、指先で探検しよう。</p></header>
+<div class="layout"><section class="viewer"><div id="canvas-holder"></div><div class="status" id="status">描画準備中…</div></section>
+<aside><h2 style="font-size:1rem;margin:0">探査コントロール</h2>
+<div><label for="palette">カラーパレット</label><select id="palette"><option value="cosmic">コズミック</option><option value="fire">炎</option><option value="ocean">深海</option><option value="mono">モノクロ</option></select></div>
+<div><label for="iterations">反復回数 <span class="value" id="iterVal">180</span></label><input id="iterations" type="range" min="60" max="600" step="20" value="180"></div>
+<div><label for="quality">描画品質</label><select id="quality"><option value="1">高画質</option><option value="2" selected>標準（軽快）</option><option value="3">高速</option></select></div>
+<div><label>ズーム操作</label><button id="zoomIn">＋ 拡大</button><button id="zoomOut">－ 縮小</button></div>
+<div><label>表示と保存</label><button id="reset">⌂ 初期位置に戻す</button><button id="save">↓ PNG画像を保存</button></div>
+<p class="small">ホイール：カーソル位置を中心にズーム<br>ドラッグ：平行移動<br>タッチ：1本指で移動、2本指で拡大・縮小<br>※ 極端な拡大では浮動小数点精度の限界があります。</p>
+</aside></div><footer>Powered by p5.js · Mandelbrot zₙ₊₁ = zₙ² + c</footer>
+<script>
+let centerX=-0.65,centerY=0,span=3.5,iterations=180,quality=2,palette='cosmic';
+let cnv,buffer,needsRender=true,renderRow=0,dragging=false,lastX=0,lastY=0,pinchDist=0,pinchMid=null;
+const holder=document.getElementById('canvas-holder'),statusEl=document.getElementById('status');
+function setup(){cnv=createCanvas(holder.clientWidth,holder.clientHeight);cnv.parent('canvas-holder');pixelDensity(1);noSmooth();resetBuffer();}
+function windowResized(){resizeCanvas(holder.clientWidth,holder.clientHeight);resetBuffer();}
+function resetBuffer(){buffer=createGraphics(Math.ceil(width/quality),Math.ceil(height/quality));buffer.pixelDensity(1);buffer.noSmooth();needsRender=true;renderRow=0;}
+function invalidate(){needsRender=true;renderRow=0;}
+function mapPoint(x,y){const unit=span/Math.min(width,height);return {x:centerX+(x-width/2)*unit,y:centerY+(y-height/2)*unit};}
+function rgb(t,n){if(n>=iterations)return [0,0,0];let v=Math.max(0,Math.min(1,t/iterations));let r,g,b;
+if(palette==='mono'){let a=Math.floor(255*Math.pow(v,.48));return[a,a,a];}
+if(palette==='fire'){r=255*Math.pow(v,.45);g=255*Math.pow(v,1.1);b=130*Math.pow(v,3);}
+else if(palette==='ocean'){r=50+130*Math.pow(v,2);g=35+205*Math.pow(v,.8);b=95+160*Math.sin(Math.PI*v*.8);}
+else{let a=6.2831853*(v*2.4);r=120+120*Math.cos(a+.2);g=125+120*Math.cos(a+2.3);b=140+110*Math.cos(a+4.1);}
+return [Math.max(0,Math.min(255,r)),Math.max(0,Math.min(255,g)),Math.max(0,Math.min(255,b))];}
+function drawRows(rows){const bw=buffer.width,bh=buffer.height;buffer.loadPixels();let end=Math.min(bh,renderRow+rows),unit=span/Math.min(width,height);
+for(let py=renderRow;py<end;py++){let ci=centerY+((py+.5)*height/bh-height/2)*unit;
+for(let px=0;px<bw;px++){let cr=centerX+((px+.5)*width/bw-width/2)*unit;let zr=0,zi=0,n=0,mag=0;
+// Main cardioid and period-2 bulb tests
+let x=cr-.25,q=x*x+ci*ci;
+if(q*(q+x)<=.25*ci*ci || (cr+1)*(cr+1)+ci*ci<=.0625){n=iterations;}
+else{while(n<iterations){let zr2=zr*zr,zi2=zi*zi;mag=zr2+zi2;if(mag>256)break;zi=2*zr*zi+ci;zr=zr2-zi2+cr;n++;}}
+let smooth=n;if(n<iterations){let abs=Math.sqrt(Math.max(mag,1.000001));smooth=n+1-Math.log2(Math.max(Math.log2(abs),.00001));}
+let col=rgb(smooth,n),idx=4*(py*bw+px);buffer.pixels[idx]=col[0];buffer.pixels[idx+1]=col[1];buffer.pixels[idx+2]=col[2];buffer.pixels[idx+3]=255;
+}}
+buffer.updatePixels();renderRow=end;if(end>=bh)needsRender=false;}
+function draw(){background(0);if(needsRender)drawRows(quality===1?Math.max(2,Math.floor(120000/buffer.width)):Math.max(4,Math.floor(160000/buffer.width)));image(buffer,0,0,width,height);const zoom=(3.5/span).toExponential(2);statusEl.textContent=`中心 ${centerX.toFixed(10)} ${centerY<0?'−':'+'} ${Math.abs(centerY).toFixed(10)}i  |  拡大率 ${zoom}×  |  ${needsRender?'描画中 '+Math.floor(renderRow/buffer.height*100)+'%':'描画完了'}`;}
+function zoomAt(factor,x,y){let before=mapPoint(x,y);span*=factor;let after=mapPoint(x,y);centerX+=before.x-after.x;centerY+=before.y-after.y;invalidate();}
+function inside(x,y){return x>=0&&y>=0&&x<=width&&y<=height;}
+function mouseWheel(e){if(inside(mouseX,mouseY)){zoomAt(e.deltaY>0?1.25:.8,mouseX,mouseY);return false;}}
+function mousePressed(){if(inside(mouseX,mouseY)){dragging=true;lastX=mouseX;lastY=mouseY;return false;}}
+function mouseDragged(){if(dragging){const u=span/Math.min(width,height);centerX-=(mouseX-lastX)*u;centerY-=(mouseY-lastY)*u;lastX=mouseX;lastY=mouseY;invalidate();return false;}}
+function mouseReleased(){dragging=false;}
+// Native touch handlers avoid mouse/touch duplicate handling and allow pinch zoom.
+const touchState={points:[]};function touchInfo(e){const rect=cnv.elt.getBoundingClientRect();return [...e.touches].map(t=>({x:t.clientX-rect.left,y:t.clientY-rect.top}));}
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+function touchStart(e){e.preventDefault();touchState.points=touchInfo(e);if(touchState.points.length===2){pinchDist=dist(...touchState.points);pinchMid={x:(touchState.points[0].x+touchState.points[1].x)/2,y:(touchState.points[0].y+touchState.points[1].y)/2};}dragging=false;}
+function touchMove(e){e.preventDefault();let next=touchInfo(e),prev=touchState.points;if(next.length===1&&prev.length===1){let u=span/Math.min(width,height);centerX-=(next[0].x-prev[0].x)*u;centerY-=(next[0].y-prev[0].y)*u;invalidate();}else if(next.length>=2&&prev.length>=2){let oldMid={x:(prev[0].x+prev[1].x)/2,y:(prev[0].y+prev[1].y)/2},newMid={x:(next[0].x+next[1].x)/2,y:(next[0].y+next[1].y)/2};let u=span/Math.min(width,height);centerX-=(newMid.x-oldMid.x)*u;centerY-=(newMid.y-oldMid.y)*u;let d0=dist(prev[0],prev[1]),d1=dist(next[0],next[1]);if(d0>0&&d1>0)zoomAt(d0/d1,newMid.x,newMid.y);}
+touchState.points=next;}
+function touchEnd(e){e.preventDefault();touchState.points=touchInfo(e);}
+function bind(){cnv.elt.addEventListener('touchstart',touchStart,{passive:false});cnv.elt.addEventListener('touchmove',touchMove,{passive:false});cnv.elt.addEventListener('touchend',touchEnd,{passive:false});cnv.elt.addEventListener('touchcancel',touchEnd,{passive:false});}
+const oldSetup=setup;setup=function(){oldSetup();bind();};
+document.getElementById('palette').onchange=e=>{palette=e.target.value;invalidate();};
+document.getElementById('iterations').oninput=e=>{iterations=+e.target.value;document.getElementById('iterVal').textContent=iterations;invalidate();};
+document.getElementById('quality').onchange=e=>{quality=+e.target.value;resetBuffer();};
+document.getElementById('zoomIn').onclick=()=>zoomAt(.5,width/2,height/2);
+document.getElementById('zoomOut').onclick=()=>zoomAt(2,width/2,height/2);
+document.getElementById('reset').onclick=()=>{centerX=-.65;centerY=0;span=3.5;invalidate();};
+document.getElementById('save').onclick=()=>saveCanvas(cnv,'mandelbrot-explorer','png');
+</script></body></html>
